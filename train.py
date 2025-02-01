@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import glob
 import re
+from shutil import copyfile
 
 import numpy as np
 import torch
@@ -404,6 +405,15 @@ def optimize_mesh(
                 util.save_image(FLAGS.out_dir + '/' + ('img_%s_%06d.png' % (pass_name, img_cnt)), np_result_image)
                 img_cnt = img_cnt+1
 
+        if FLAGS.local_rank == 0:
+            display_image = FLAGS.display_interval and (it % FLAGS.display_interval == 0)
+            save_image = FLAGS.save_interval and (it % FLAGS.save_interval == 0)
+            if display_image or save_image:
+                saved_mesh = geometry.getMesh(opt_material)
+                saved_mesh_path = os.path.join(FLAGS.out_dir, "mesh", "it_%d" % it)
+                os.makedirs(saved_mesh_path, exist_ok=True)
+                obj.write_obj(saved_mesh_path, saved_mesh)
+
         optimizer.zero_grad()
         if optimize_geometry:
             optimizer_mesh.zero_grad()
@@ -569,9 +579,9 @@ if __name__ == "__main__":
     if FLAGS.display_res is None:
         FLAGS.display_res = FLAGS.train_res
     if FLAGS.out_dir is None:
-        FLAGS.out_dir = 'out/cube_%d' % (FLAGS.train_res)
+        FLAGS.out_dir = os.path.join('out', 'cube_%d' % (FLAGS.train_res), time.strftime("_%Y%m%d_%H%M%S"))
     else:
-        FLAGS.out_dir = 'out/' + FLAGS.out_dir
+        FLAGS.out_dir = os.path.join('out', FLAGS.out_dir, time.strftime("%Y%m%d_%H%M%S"))
 
     print("Config / Flags:")
     print("---------")
@@ -580,6 +590,8 @@ if __name__ == "__main__":
     print("---------")
 
     os.makedirs(FLAGS.out_dir, exist_ok=True)
+    if os.path.exists(FLAGS.config):
+        copyfile(FLAGS.config, os.path.join(FLAGS.out_dir, 'config.json'))
 
     glctx         = dr.RasterizeGLContext() # Context for training
     glctx_display = glctx if FLAGS.batch < 16 else dr.RasterizeGLContext() # Context for display
